@@ -1,0 +1,91 @@
+package                  group                 cves bump worst      trivy grype
+apt                      base OS                  2    1 HIGH           2     2
+bash                     base OS                  1    0 LOW            1     0
+bsdutils                 base OS                  8    0 HIGH           8     8
+ca-certificates          added by nginx image     2    2 UNKNOWN        2     0
+coreutils                base OS                  5    0 LOW            5     5
+curl                     added by nginx image    52   14 CRITICAL      52    52
+dash                     base OS                  2    0 LOW            2     2
+diffutils                base OS                  1    0 LOW            1     1
+dpkg                     base OS                  3    2 HIGH           3     3
+gcc-12-base              base OS                  8    1 HIGH           8     8
+gpgv                     base OS                  6    1 HIGH           6     6
+gzip                     base OS                  2    0 HIGH           2     2
+libabsl20220623          added by nginx image     1    1 CRITICAL       1     1
+libacl1                  base OS                  2    0 HIGH           2     2
+libaom3                  added by nginx image     7    5 CRITICAL       7     7
+libapt-pkg6.0            base OS                  2    1 HIGH           2     2
+libattr1                 base OS                  1    0 MEDIUM         1     1
+libavif15                added by nginx image     2    2 CRITICAL       2     2
+libblkid1                base OS                  8    0 HIGH           8     8
+libbrotli1               added by nginx image     1    1 CRITICAL       1     1
+libbz2-1.0               base OS                  1    0 MEDIUM         1     1
+libc-bin                 base OS                 35    9 CRITICAL      35    35
+libc6                    loaded by nginx         35    9 CRITICAL      35    35
+libcap2                  base OS                  2    2 HIGH           2     2
+libcurl4                 added by nginx image    52   14 CRITICAL      52    52
+libdav1d6                added by nginx image     1    0 MEDIUM         1     1
+libde265-0               added by nginx image    16   14 HIGH          16    14
+libexpat1                added by nginx image    42   33 CRITICAL      42    42
+libfreetype6             added by nginx image     2    1 HIGH           2     2
+libgcc-s1                base OS                  8    1 HIGH           8     8
+libgcrypt20              base OS                  3    1 MEDIUM         3     3
+libgd3                   added by nginx image     5    1 HIGH           5     1
+libgnutls30              base OS                 27   21 CRITICAL      27    27
+libgssapi-krb5-2         added by nginx image    30    7 CRITICAL      30    30
+libheif1                 added by nginx image    73    3 HIGH          73    34
+libicu72                 added by nginx image     1    1 HIGH           1     1
+libjbig0                 added by nginx image     1    0 LOW            1     1
+libk5crypto3             added by nginx image    30    7 CRITICAL      30    30
+libkrb5-3                added by nginx image    30    7 CRITICAL      30    30
+libkrb5support0          added by nginx image    30    7 CRITICAL      30    30
+libldap-2.5-0            added by nginx image     6    0 HIGH           6     6
+liblzma5                 base OS                  4    4 HIGH           4     2
+libmount1                base OS                  8    0 HIGH           8     8
+libnghttp2-14            added by nginx image     3    2 HIGH           3     3
+libp11-kit0              base OS                  2    0 MEDIUM         2     2
+libpam-modules           base OS                  4    1 HIGH           4     4
+libpam-modules-bin       base OS                  4    1 HIGH           4     4
+libpam-runtime           base OS                  4    1 HIGH           4     4
+libpam0g                 base OS                  4    1 HIGH           4     4
+libpcre2-8-0             loaded by nginx          7    7 HIGH           7     7
+libpng16-16              added by nginx image    16   12 HIGH          16    16
+libsasl2-2               added by nginx image     2    1 HIGH           2     2
+libsasl2-modules-db      added by nginx image     2    1 HIGH           2     2
+libsmartcols1            base OS                  8    0 HIGH           8     8
+libssh2-1                added by nginx image     6    6 CRITICAL       6     6
+libssl3                  loaded by nginx         54   48 CRITICAL      54    54
+libstdc++6               base OS                  8    1 HIGH           8     8
+libsystemd0              base OS                 14    7 HIGH          14    14
+libtasn1-6               base OS                  2    1 HIGH           2     2
+libtiff6                 added by nginx image    33    9 CRITICAL      33    33
+libtinfo6                base OS                  3    0 HIGH           3     3
+libudev1                 base OS                 14    7 HIGH          14    14
+libuuid1                 base OS                  8    0 HIGH           8     8
+libx11-6                 added by nginx image     4    0 HIGH           4     4
+libx11-data              added by nginx image     4    0 HIGH           4     4
+libxml2                  added by nginx image    30   21 CRITICAL      30    29
+libxpm4                  added by nginx image     2    0 MEDIUM         2     2
+libxslt1.1               added by nginx image     8    5 HIGH           8     7
+login                    base OS                  5    2 MEDIUM         5     4
+mount                    base OS                  8    0 HIGH           8     8
+ncurses-base             base OS                  3    0 HIGH           3     3
+ncurses-bin              base OS                  3    0 HIGH           3     3
+nginx                    nginx                    8    0 CRITICAL       0     8
+openssl                  added by nginx image    54   48 CRITICAL      54    54
+passwd                   base OS                  5    2 MEDIUM         5     4
+perl-base                base OS                 21   16 CRITICAL      21    21
+sed                      base OS                  1    1 MEDIUM         1     1
+sysvinit-utils           base OS                  1    0 LOW            1     0
+tar                      base OS                  5    0 MEDIUM         5     4
+tzdata                   base OS                  3    3 UNKNOWN        3     0
+util-linux               base OS                  8    0 HIGH           8     8
+util-linux-extra         base OS                  8    0 HIGH           8     8
+zlib1g                   loaded by nginx          4    0 CRITICAL       4     3
+
+added by nginx image   548 findings,  225 fixable by bump
+base OS                285 findings,   88 fixable by bump
+loaded by nginx        100 findings,   64 fixable by bump
+nginx                    8 findings,    0 fixable by bump
+
+941 rows written to scans/baseline-cves.csv
