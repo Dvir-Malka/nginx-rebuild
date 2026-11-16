@@ -14,3 +14,8 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
+
+# The build script is copied in after the package install above, so that
+# editing it does not make Docker reinstall the compiler.
+COPY build.sh .
+RUN bash build.sh
