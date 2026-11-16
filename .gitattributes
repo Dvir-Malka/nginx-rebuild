@@ -1,0 +1,10 @@
+# Force LF everywhere. Shell scripts with CRLF break inside Linux containers.
+* text=auto eol=lf
+*.sh text eol=lf
+*.envsh text eol=lf
+Makefile text eol=lf
+Containerfile text eol=lf
+Dockerfile text eol=lf
+*.patch text eol=lf -whitespace
+*.deb binary
+*.tar.gz binary

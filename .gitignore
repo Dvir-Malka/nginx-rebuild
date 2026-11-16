@@ -1,0 +1,17 @@
+# Build outputs — reviewers rebuild these with one command
+dist/
+*.deb
+*.tar
+*.tar.gz
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Editors / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
