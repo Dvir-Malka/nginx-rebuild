@@ -8,9 +8,10 @@ set -euo pipefail
 NGINX_VERSION=1.25.5
 TARBALL="nginx-${NGINX_VERSION}.tar.gz"
 
-# Version of our package: upstream's package version plus "+echo1", which
-# marks it as our rebuild and sorts higher than the original in dpkg.
-PKG_VERSION="${NGINX_VERSION}-1~bookworm+echo1"
+# Version of our package: upstream's package version plus "+echoN". "+echo"
+# marks it as our rebuild and sorts higher than the original in dpkg; N goes
+# up whenever our binary changes (2: CVE-2026-15176 patch added).
+PKG_VERSION="${NGINX_VERSION}-1~bookworm+echo2"
 
 # SHA-256 of the tarball, recorded on 16 Nov 2026 after its PGP signature
 # was checked by hand. Pinned so every build uses exactly the same source.
@@ -47,6 +48,15 @@ echo "njs ${NJS_VERSION}: commit ${NJS_COMMIT} OK"
 echo "== 3. Unpack"
 tar -xzf "${TARBALL}"
 ls "nginx-${NGINX_VERSION}"
+
+echo "== 3b. Apply security patches"
+# Every file in patches/ is a backported upstream fix, named after its CVE.
+# --fuzz=0: a hunk must match the 1.25.5 source exactly, or the build fails,
+# so a patch can never land in the wrong place without anyone noticing.
+for p in /build/patches/*.patch; do
+  echo "applying ${p##*/}"
+  patch -d "nginx-${NGINX_VERSION}" -p1 --fuzz=0 < "${p}"
+done
 
 echo "== 4. Configure"
 cd "nginx-${NGINX_VERSION}"
@@ -284,7 +294,7 @@ build_module_deb /pkg-image-filter nginx-module-image-filter "${PKG_VERSION}" \
 mkdir -p /pkg-njs/usr/lib/nginx/modules /pkg-njs/usr/bin
 cp -p /mods/ngx_http_js_module*.so /mods/ngx_stream_js_module*.so /pkg-njs/usr/lib/nginx/modules/
 install -m 755 /build/njs/build/njs /pkg-njs/usr/bin/njs
-build_module_deb /pkg-njs nginx-module-njs "${NGINX_VERSION}+${NJS_VERSION}-3~bookworm+echo1" \
+build_module_deb /pkg-njs nginx-module-njs "${NGINX_VERSION}+${NJS_VERSION}-3~bookworm+echo2" \
   "libc6 (>= 2.35), libedit2 (>= 3.1-20130611-0), libpcre2-8-0 (>= 10.32), libssl3 (>= 3.0.0), libxml2 (>= 2.7.4), zlib1g (>= 1:1.1.4), nginx-r${NGINX_VERSION}" \
   "nginx ${NGINX_VERSION} njs dynamic modules, rebuilt from upstream source"
 
