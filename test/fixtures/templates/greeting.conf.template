@@ -1,0 +1,11 @@
+# Rendered at container start by the entrypoint (20-envsubst-on-templates.sh)
+# into /etc/nginx/conf.d/greeting.conf, with ${TEST_GREETING} filled in from
+# the environment. $host is not an environment variable, so nginx keeps it.
+server {
+    listen 80;
+    server_name templated.test;
+
+    location / {
+        return 200 "${TEST_GREETING} from $host\n";
+    }
+}

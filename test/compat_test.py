@@ -34,13 +34,14 @@ def docker(*args):
 class Container:
     """One nginx container on a free port of 127.0.0.1."""
 
-    def __init__(self, image, files=()):
+    def __init__(self, image, files=(), env=None):
         # create + cp + start instead of a bind mount: the files are in place
         # before the entrypoint runs, and it works the same on Linux, macOS
         # and Docker Desktop, with no host path rewriting.
         # "127.0.0.1::80" = Docker picks a free host port, so the two
         # containers never clash and nothing is exposed beyond localhost.
-        self.id = docker("create", "-p", "127.0.0.1::80", image)
+        env_flags = [f"--env={k}={v}" for k, v in (env or {}).items()]
+        self.id = docker("create", "-p", "127.0.0.1::80", *env_flags, image)
         try:
             for src, dest in files:
                 docker("cp", src, f"{self.id}:{dest}")
@@ -103,14 +104,15 @@ def strip_date(raw):
 
 
 class CompareBase(unittest.TestCase):
-    """Starts both images with the same files copied in; no tests itself."""
+    """Starts both images with the same files and env; no tests itself."""
     files = ()
+    env = {}
 
     @classmethod
     def setUpClass(cls):
-        cls.upstream = Container(UPSTREAM, cls.files)
+        cls.upstream = Container(UPSTREAM, cls.files, cls.env)
         cls.addClassCleanup(cls.upstream.remove)
-        cls.ours = Container(OURS, cls.files)
+        cls.ours = Container(OURS, cls.files, cls.env)
         cls.addClassCleanup(cls.ours.remove)
 
     def assertSameResponse(self, method, path, headers=None, body=None):
@@ -284,6 +286,20 @@ class MalformedRequests(CompareBase):
         resp = self.assertSameRaw(req)
         self.assertTrue(resp.startswith(b"HTTP/1.1 400 "))
         self.assertIn(b"Request Header Or Cookie Too Large", resp)
+
+
+class EntrypointTemplate(CompareBase):
+    """Upstream's entrypoint turns /etc/nginx/templates/*.template into
+    config at start, filling in environment variables with envsubst."""
+    # docker cp of a folder creates /etc/nginx/templates (not in the image).
+    files = [(os.path.join(FIXTURES, "templates"), "/etc/nginx/templates")]
+    env = {"TEST_GREETING": "hello-from-env"}
+
+    def test_template_rendered_with_env(self):
+        status, _, body = self.assertSameResponse(
+            "GET", "/", {"Host": "templated.test"})
+        self.assertEqual((status, body),
+                         (200, b"hello-from-env from templated.test\n"))
 
 
 def inspect_config(image):
