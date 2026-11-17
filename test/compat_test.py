@@ -5,13 +5,17 @@ status, headers and body are equal. Run: python3 test/compat_test.py
 """
 import http.client
 import os
+import shutil
 import subprocess
+import tempfile
 import time
 import unittest
 
 # Overridable so reviewers can point the test at other images.
 UPSTREAM = os.environ.get("UPSTREAM_IMAGE", "nginx:1.25-bookworm")
 OURS = os.environ.get("IMAGE", "nginx-rebuild:1.25.5")
+
+FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
 
 # Headers that differ between two runs of the SAME image (clock), so a
 # difference there says nothing about the images.
@@ -27,11 +31,17 @@ def docker(*args):
 class Container:
     """One nginx container on a free port of 127.0.0.1."""
 
-    def __init__(self, image):
+    def __init__(self, image, files=()):
+        # create + cp + start instead of a bind mount: the files are in place
+        # before the entrypoint runs, and it works the same on Linux, macOS
+        # and Docker Desktop, with no host path rewriting.
         # "127.0.0.1::80" = Docker picks a free host port, so the two
         # containers never clash and nothing is exposed beyond localhost.
-        self.id = docker("run", "-d", "-p", "127.0.0.1::80", image)
+        self.id = docker("create", "-p", "127.0.0.1::80", image)
         try:
+            for src, dest in files:
+                docker("cp", src, f"{self.id}:{dest}")
+            docker("start", self.id)
             # "docker port" prints e.g. "127.0.0.1:49153".
             self.port = int(docker("port", self.id, "80/tcp").rsplit(":", 1)[1])
             self.wait_ready()
@@ -51,9 +61,12 @@ class Container:
         raise RuntimeError(f"{self.id[:12]} not ready after {timeout}s")
 
     def request(self, method, path, headers=None, body=None):
+        # Fixed Host: otherwise each side sends its own random port, and
+        # nginx copies the Host into redirect Location headers.
+        headers = {"Host": "localhost", **(headers or {})}
         conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
         try:
-            conn.request(method, path, body=body, headers=headers or {})
+            conn.request(method, path, body=body, headers=headers)
             resp = conn.getresponse()
             return resp.status, resp.getheaders(), resp.read()
         finally:
@@ -70,12 +83,15 @@ def normalize(headers):
             if k.lower() not in IGNORED_HEADERS]
 
 
-class DefaultConfig(unittest.TestCase):
+class CompareBase(unittest.TestCase):
+    """Starts both images with the same files copied in; no tests itself."""
+    files = ()
+
     @classmethod
     def setUpClass(cls):
-        cls.upstream = Container(UPSTREAM)
+        cls.upstream = Container(UPSTREAM, cls.files)
         cls.addClassCleanup(cls.upstream.remove)
-        cls.ours = Container(OURS)
+        cls.ours = Container(OURS, cls.files)
         cls.addClassCleanup(cls.ours.remove)
 
     def assertSameResponse(self, method, path, headers=None, body=None):
@@ -86,6 +102,8 @@ class DefaultConfig(unittest.TestCase):
         self.assertEqual(a[2], b[2], "body differs")
         return a
 
+
+class DefaultConfig(CompareBase):
     def test_get_root(self):
         status, _, body = self.assertSameResponse("GET", "/")
         # Sanity check: two images broken the same way would also "match".
@@ -132,6 +150,80 @@ class DefaultConfig(unittest.TestCase):
         self.assertEqual(status, 206)
         self.assertEqual(dict(normalize(headers))["content-range"], "bytes 0-99/615")
         self.assertEqual(len(body), 100)
+
+
+class CustomConfig(CompareBase):
+    @classmethod
+    def setUpClass(cls):
+        # 1 MiB file made at test time, so no large file sits in the repo.
+        tmp = tempfile.mkdtemp()
+        cls.addClassCleanup(shutil.rmtree, tmp)
+        big = os.path.join(tmp, "big.bin")
+        with open(big, "wb") as f:
+            f.write(bytes(range(256)) * 4096)
+        cls.files = [
+            (os.path.join(FIXTURES, "custom.conf"), "/etc/nginx/conf.d/default.conf"),
+            (big, "/usr/share/nginx/html/big.bin"),
+        ]
+        super().setUpClass()
+
+    def header(self, headers, name):
+        return dict(normalize(headers)).get(name)
+
+    def test_return_200_with_custom_header(self):
+        status, headers, body = self.assertSameResponse("GET", "/hello")
+        self.assertEqual((status, body), (200, b"hello\n"))
+        self.assertEqual(self.header(headers, "x-test"), "echo")
+
+    def test_redirect_301(self):
+        status, headers, _ = self.assertSameResponse("GET", "/old")
+        self.assertEqual(status, 301)
+        self.assertEqual(self.header(headers, "location"), "http://localhost/new")
+
+    def test_rewrite_captures_and_query(self):
+        status, _, body = self.assertSameResponse("GET", "/rw/abc/42?x=1")
+        self.assertEqual(status, 200)
+        self.assertEqual(body, b"uri=/echo args=name=abc&id=42&x=1\n")
+
+    def test_rewrite_redirect(self):
+        status, headers, _ = self.assertSameResponse("GET", "/go/there")
+        self.assertEqual(status, 302)
+        self.assertEqual(self.header(headers, "location"),
+                         "http://localhost/hello?from=there")
+
+    def test_gzip_when_asked(self):
+        _, headers, _ = self.assertSameResponse(
+            "GET", "/index.html", {"Accept-Encoding": "gzip"})
+        self.assertEqual(self.header(headers, "content-encoding"), "gzip")
+
+    def test_no_gzip_when_not_asked(self):
+        _, headers, _ = self.assertSameResponse("GET", "/index.html")
+        self.assertIsNone(self.header(headers, "content-encoding"))
+
+    def test_large_file(self):
+        status, _, body = self.assertSameResponse("GET", "/big.bin")
+        self.assertEqual((status, len(body)), (200, 1048576))
+
+    def test_range_on_large_file(self):
+        status, headers, body = self.assertSameResponse(
+            "GET", "/big.bin", {"Range": "bytes=1000-1999"})
+        self.assertEqual(status, 206)
+        self.assertEqual(self.header(headers, "content-range"),
+                         "bytes 1000-1999/1048576")
+        self.assertEqual(len(body), 1000)
+
+    def test_body_over_limit(self):
+        status, _, _ = self.assertSameResponse("POST", "/upload", body=b"a" * 2048)
+        self.assertEqual(status, 413)
+
+    def test_body_under_limit(self):
+        status, _, body = self.assertSameResponse("POST", "/upload", body=b"a" * 512)
+        self.assertEqual((status, body), (200, b"got 512 bytes\n"))
+
+    def test_very_long_uri(self):
+        # Default large_client_header_buffers is 8k, so 10k of URI is too long.
+        status, _, _ = self.assertSameResponse("GET", "/" + "a" * 10000)
+        self.assertEqual(status, 414)
 
 
 if __name__ == "__main__":
