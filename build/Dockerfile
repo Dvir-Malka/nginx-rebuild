@@ -9,11 +9,14 @@ FROM debian:bookworm-slim AS builder
 #   zlib1g-dev               (the same ones `ldd /usr/sbin/nginx` showed upstream)
 # libxml2-dev, libxslt1-dev, headers for the dynamic modules: xslt,
 #   libgd-dev, libgeoip-dev  image-filter and geoip
+# git                        fetch njs, which has no release tarball
+# libedit-dev                line editing for the njs command-line tool
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       build-essential ca-certificates curl gnupg \
       libssl-dev libpcre2-dev zlib1g-dev \
       libxml2-dev libxslt1-dev libgd-dev libgeoip-dev \
+      git libedit-dev \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build

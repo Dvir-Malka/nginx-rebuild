@@ -21,10 +21,17 @@ NGINX_SHA256=2fe2294f8af4144e7e842eaea884182a84ee7970e11046ba98194400902bbec0
 # nginx.org itself, is not accepted.
 NGINX_KEY=43387825DDB1BB97EC36BA5D007C8D7C15D87369
 
+# njs, nginx's JavaScript module, has no release tarball or signature.
+# Its 0.8.4 tag points at this commit (GitHub release page and
+# `git ls-remote`, checked 17 Nov 2026); the build fails on any other.
+NJS_VERSION=0.8.4
+NJS_COMMIT=3fb0ee5e907c9a4153d92946c1ef1b96202f883b
+
 echo "== 1. Fetch source, signature and signing key"
 curl -fsSLO "https://nginx.org/download/${TARBALL}"
 curl -fsSLO "https://nginx.org/download/${TARBALL}.asc"
 curl -fsSLO "https://nginx.org/keys/arut.key"
+git clone --quiet --depth 1 --branch "${NJS_VERSION}" https://github.com/nginx/njs.git
 
 echo "== 2. Verify"
 # Checksum: is this the same file we verified before?
@@ -33,6 +40,9 @@ echo "${NGINX_SHA256}  ${TARBALL}" | sha256sum --check -
 # with the signer's fingerprint; grep fails the build if ours is not there.
 gpg --import arut.key
 gpg --status-fd 1 --verify "${TARBALL}.asc" "${TARBALL}" | grep "VALIDSIG ${NGINX_KEY}"
+# njs: the code must be exactly the pinned commit.
+test "$(git -C njs rev-parse HEAD)" = "${NJS_COMMIT}"
+echo "njs ${NJS_VERSION}: commit ${NJS_COMMIT} OK"
 
 echo "== 3. Unpack"
 tar -xzf "${TARBALL}"
@@ -148,6 +158,8 @@ MODULE_FLAGS=(
   --with-http_image_filter_module=dynamic
   --with-http_geoip_module=dynamic
   --with-stream_geoip_module=dynamic
+  # njs: built from its own source, the same way as the modules above.
+  --add-dynamic-module=/build/njs/nginx
 )
 mkdir /mods
 # For nginx-debug: same flags plus --with-debug, saved as name-debug.so.
@@ -164,12 +176,27 @@ make -j"$(nproc)" modules
 install -m 644 objs/*.so /mods/
 ls -l /mods
 
-echo "== 10. Package"
+echo "== 10. Compile the njs command-line tool"
+# Built from the njs folder with ./configure and make njs, as nginx.org's
+# njs install page describes. Same hardening flags as nginx.
+# The parentheses run this in a subshell, so the cd does not affect the
+# rest of the script.
+(
+  cd /build/njs
+  ./configure \
+    --cc-opt="-g -O2 -fstack-protector-strong -Wformat -Werror=format-security -Wp,-D_FORTIFY_SOURCE=2 -fPIC" \
+    --ld-opt='-Wl,-z,relro -Wl,-z,now -Wl,--as-needed -pie'
+  make -j"$(nproc)" njs
+  ./build/njs -v
+)
+
+echo "== 11. Package"
 # Remove debug information before packaging, as Debian packaging does.
 # Upstream's nginx package is 3.4 MB installed; unstripped, ours would be
 # about 17 MB. The code that runs does not change.
 strip /pkgroot/usr/sbin/nginx /pkgroot/usr/sbin/nginx-debug
 strip --strip-unneeded /mods/*.so
+strip /build/njs/build/njs
 ARCH="$(dpkg --print-architecture)"
 mkdir /pkgroot/DEBIAN
 # Depends, Provides, Conflicts and Replaces follow `dpkg -s nginx` in
@@ -251,6 +278,15 @@ cp -p /mods/ngx_http_image_filter_module*.so /pkg-image-filter/usr/lib/nginx/mod
 build_module_deb /pkg-image-filter nginx-module-image-filter "${PKG_VERSION}" \
   "libc6 (>= 2.14), libgd3 (>= 2.1.0~alpha~), nginx-r${NGINX_VERSION}" \
   "nginx ${NGINX_VERSION} image-filter dynamic module, rebuilt from upstream source"
+
+# njs: upstream's version is nginx's, then njs's, then packaging revision 3
+# (NJS_RELEASE=3~bookworm in the upstream image).
+mkdir -p /pkg-njs/usr/lib/nginx/modules /pkg-njs/usr/bin
+cp -p /mods/ngx_http_js_module*.so /mods/ngx_stream_js_module*.so /pkg-njs/usr/lib/nginx/modules/
+install -m 755 /build/njs/build/njs /pkg-njs/usr/bin/njs
+build_module_deb /pkg-njs nginx-module-njs "${NGINX_VERSION}+${NJS_VERSION}-3~bookworm+echo1" \
+  "libc6 (>= 2.35), libedit2 (>= 3.1-20130611-0), libpcre2-8-0 (>= 10.32), libssl3 (>= 3.0.0), libxml2 (>= 2.7.4), zlib1g (>= 1:1.1.4), nginx-r${NGINX_VERSION}" \
+  "nginx ${NGINX_VERSION} njs dynamic modules, rebuilt from upstream source"
 
 # Show the metadata and the file list of every package we built.
 for deb in /out/*.deb; do
