@@ -3,13 +3,14 @@
 #   make deb    build nginx from source and write the .debs to dist/
 #   make image  build the final image from dist/ (runs make deb first)
 #   make scan   scan the image with Trivy and Grype, write scans/fixed-* and scans/DIFF.md
+#   make test   compare the image with upstream nginx:1.25-bookworm (test/compat_test.py)
 #   make clean  delete dist/
 
 # Name of the final image; override with: make image IMAGE=name:tag
 IMAGE ?= nginx-rebuild:1.25.5
 
 # These targets are command names, not files make should look for.
-.PHONY: all deb image scan clean
+.PHONY: all deb image scan test clean
 
 all: image
 
@@ -43,6 +44,12 @@ scan: image
 	  -e GRYPE_DB_AUTO_UPDATE=$(GRYPE_DB_AUTO_UPDATE) \
 	  $(GRYPE) $(IMAGE) -o table=/out/fixed-grype.txt -o json=/out/fixed-grype.json
 	python3 scans/diff.py
+
+# Boots upstream and $(IMAGE) side by side and compares their responses;
+# exits non-zero on any mismatch. Depends on image, so we never test a stale
+# image. Needs only python3 (standard library) besides Docker.
+test: image
+	IMAGE=$(IMAGE) python3 test/compat_test.py
 
 clean:
 	rm -rf dist
