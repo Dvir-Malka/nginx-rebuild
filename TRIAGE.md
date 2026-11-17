@@ -42,6 +42,8 @@ both `libssl3` and `openssl`.
 
 ### Libraries the nginx binary loads
 
+Five libraries; `libcrypt1` has no findings, so the group table above counts 4.
+
 | Package | Installed | Findings | Fixable by bump | Worst severity |
 |---|---|---|---|---|
 | `libssl3` (OpenSSL) | 3.0.11-1~deb12u2 | 54 | 48 | Critical |
@@ -70,9 +72,11 @@ All 83 packages are in `scans/baseline-summary.txt`.
 ## nginx itself
 
 The nginx in this image is nginx.org's package (`1.25.5-1~bookworm`), not
-Debian's (Debian 12 ships 1.22.1). That breaks both scanners:
+Debian's (Debian 12 ships 1.22.1). Neither scanner sees it correctly:
 
-- **Trivy reports nothing for nginx.**
+- **Trivy reports nothing for nginx.** It deliberately skips packages whose
+  maintainer is nginx.org's packaging address (found in the rescan; see README,
+  "Rescan and VEX").
 - **Grype reports 8 CVEs**, all from Debian's data, matched on the package name.
   Debian's tracker lists no fixed version of Debian's nginx in Debian 12 for
   these 8, so Grype flags any package called `nginx`, whatever its version.
@@ -138,9 +142,9 @@ Tracker: <https://security-tracker.debian.org/tracker/CVE-2025-15467>
 |---|---|
 | CVE-2026-97205, -97629, -95101 (nginx) | Each would need more setup to prove the fix: an async file I/O + SSI setup, TLS certificates and session resumption, or an HTTP/3 client (Python's standard library has none). CVE-2026-15176 needed only plain HTTP and comes with a reproducer. I did not read their fixes. |
 | CVE-2026-42945 and 23 other nginx.org advisories | They affect 1.25.5 but no scanner reports them. Left as residual risk. I did not read their fixes. |
-| CVE-2024-7347 (nginx mp4 module) | Fallback backport: nginx.org publishes an official patch file. No scanner reports it. |
+| CVE-2024-7347 (nginx mp4 module) | nginx.org publishes an official patch file, but no scanner reports it, so the rescan and VEX could not show the fix. |
 | `zlib1g` | 4 findings, none with a fix in Debian 12. Nothing to bump to. |
-| `libc6`, `libpcre2-8-0` | Valid bump targets (9 and 7 fixable). OpenSSL has more findings and higher severity. |
+| `libc6`, `libpcre2-8-0` | Valid bump targets (9 and 7 fixable). OpenSSL has more findings fixable by a bump (48, vs 9 and 7). |
 | CVE-2026-31789 (OpenSSL) | The only `libssl3` finding both scanners rate Critical, but OpenSSL rates it Low: 32-bit platforms only. |
 | Packages nginx does not load | Easy to bump or remove, but that shows nothing about nginx. |
 

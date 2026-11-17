@@ -102,8 +102,8 @@ Full triage: [`TRIAGE.md`](TRIAGE.md). Summary:
   reproducer, a scanner reports it (so the VEX step has something to act on), and
   Debian backported the same change to its own nginx.
 - **Bump, from a library nginx loads.** OpenSSL (`libssl3`) had the most findings
-  among the libraries nginx links to (54, 48 of them fixed in Debian 12) and the
-  highest severity. CVE-2025-15467 is reported by both scanners and fixed in Debian's
+  among the libraries nginx links to (54, 48 of them fixed in Debian 12), including
+  Critical ones. CVE-2025-15467 is reported by both scanners and fixed in Debian's
   `3.0.18-1~deb12u2`.
 - **Why not others** (details in `TRIAGE.md` → "Why not others"):
   - the three other real nginx CVEs Grype reports would each need more setup to
