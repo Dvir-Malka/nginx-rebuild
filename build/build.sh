@@ -207,6 +207,53 @@ EOF
 mkdir /out
 # --root-owner-group records every file as owned by root, as upstream's are.
 dpkg-deb --build --root-owner-group /pkgroot "/out/nginx_${PKG_VERSION}_${ARCH}.deb"
-# Show the metadata and the file list of the package we just built.
-dpkg-deb --info /out/*.deb
-dpkg-deb --contents /out/*.deb
+
+# The dynamic modules: one package each, with upstream's names and Depends
+# (from `dpkg -s nginx-module-*` in nginx:1.25-bookworm). Each depends on
+# nginx-r1.25.5, which our nginx package provides, so a module can only be
+# installed next to the nginx version it was built for.
+
+# Builds one module .deb from a staged folder.
+# Arguments: folder, package name, version, Depends line, description.
+build_module_deb() {
+  local root="$1" name="$2" version="$3" depends="$4" description="$5"
+  mkdir "${root}/DEBIAN"
+  cat > "${root}/DEBIAN/control" <<EOF
+Package: ${name}
+Version: ${version}
+Architecture: ${ARCH}
+Maintainer: Dvir Malka <357322546+Dvir-Malka@users.noreply.github.com>
+Section: httpd
+Priority: optional
+Depends: ${depends}
+Provides: ${name}-r${NGINX_VERSION}
+Homepage: https://nginx.org
+Description: ${description}
+EOF
+  dpkg-deb --build --root-owner-group "${root}" "/out/${name}_${version}_${ARCH}.deb"
+}
+
+# cp -p keeps the 644 permissions set in section 9.
+mkdir -p /pkg-xslt/usr/lib/nginx/modules
+cp -p /mods/ngx_http_xslt_filter_module*.so /pkg-xslt/usr/lib/nginx/modules/
+build_module_deb /pkg-xslt nginx-module-xslt "${PKG_VERSION}" \
+  "libc6 (>= 2.14), libxml2 (>= 2.7.4), libxslt1.1 (>= 1.1.25), nginx-r${NGINX_VERSION}" \
+  "nginx ${NGINX_VERSION} xslt dynamic module, rebuilt from upstream source"
+
+mkdir -p /pkg-geoip/usr/lib/nginx/modules
+cp -p /mods/ngx_http_geoip_module*.so /mods/ngx_stream_geoip_module*.so /pkg-geoip/usr/lib/nginx/modules/
+build_module_deb /pkg-geoip nginx-module-geoip "${PKG_VERSION}" \
+  "libc6 (>= 2.14), libgeoip1 (>= 1.6.12), nginx-r${NGINX_VERSION}" \
+  "nginx ${NGINX_VERSION} geoip dynamic modules, rebuilt from upstream source"
+
+mkdir -p /pkg-image-filter/usr/lib/nginx/modules
+cp -p /mods/ngx_http_image_filter_module*.so /pkg-image-filter/usr/lib/nginx/modules/
+build_module_deb /pkg-image-filter nginx-module-image-filter "${PKG_VERSION}" \
+  "libc6 (>= 2.14), libgd3 (>= 2.1.0~alpha~), nginx-r${NGINX_VERSION}" \
+  "nginx ${NGINX_VERSION} image-filter dynamic module, rebuilt from upstream source"
+
+# Show the metadata and the file list of every package we built.
+for deb in /out/*.deb; do
+  dpkg-deb --info "${deb}"
+  dpkg-deb --contents "${deb}"
+done
