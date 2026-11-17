@@ -89,3 +89,28 @@ echo "== 5. Compile"
 make -j"$(nproc)"
 # Print the version and flags of the binary we just built.
 ./objs/nginx -V
+
+echo "== 6. Stage the files as they will be laid out in the package"
+# DESTDIR makes `make install` copy into /pkgroot instead of the real system.
+make install DESTDIR=/pkgroot
+# List what was installed, to compare with upstream's `dpkg -L nginx`.
+find /pkgroot | sort
+
+echo "== 7. Match the layout of upstream's nginx package"
+ETC=/pkgroot/etc/nginx
+# Files `make install` adds that upstream's package does not ship.
+rm "${ETC}"/*.default "${ETC}/fastcgi.conf" "${ETC}"/koi-utf "${ETC}"/koi-win "${ETC}"/win-utf
+rmdir /pkgroot/var/run
+# Upstream serves the default pages from /usr/share/nginx/html.
+# mv keeps the files' dates, which nginx uses for ETag and Last-Modified.
+mkdir -p /pkgroot/usr/share/nginx
+mv "${ETC}/html" /pkgroot/usr/share/nginx/html
+# nginx.conf and conf.d/default.conf come from nginx's packaging, not from
+# the source tarball. Ours are copies of the ones in nginx:1.25-bookworm.
+cp /build/debian/nginx.conf "${ETC}/nginx.conf"
+mkdir "${ETC}/conf.d"
+cp /build/debian/default.conf "${ETC}/conf.d/default.conf"
+# Empty directories and the symlink that upstream's package creates.
+mkdir -p /pkgroot/usr/lib/nginx/modules /pkgroot/var/cache/nginx
+ln -s /usr/lib/nginx/modules "${ETC}/modules"
+find /pkgroot | sort

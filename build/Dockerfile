@@ -17,5 +17,6 @@ WORKDIR /build
 
 # The build script is copied in after the package install above, so that
 # editing it does not make Docker reinstall the compiler.
+COPY debian/ debian/
 COPY build.sh .
 RUN bash build.sh
