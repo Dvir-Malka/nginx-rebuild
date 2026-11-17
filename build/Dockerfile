@@ -20,3 +20,8 @@ WORKDIR /build
 COPY debian/ debian/
 COPY build.sh .
 RUN bash build.sh
+
+# Second stage: only the .deb. `docker build --output type=local,dest=dist`
+# writes this stage's files to dist/ on the host, with no bind mount.
+FROM scratch AS export
+COPY --from=builder /out/*.deb /
