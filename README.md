@@ -16,17 +16,13 @@ Trivy and Grype need no install: `make scan` runs them as containers
 images on first use.
 Tested on Linux x86_64 (Ubuntu 24.04 under WSL2, Docker 29.9.3).
 
-    make all        # build the .debs from source, then the image nginx-rebuild:1.25.5
-    make test       # compare the image with nginx:1.25-bookworm, exits non-zero on mismatch
-    make scan       # Trivy + Grype on the image, writes scans/fixed-* and scans/DIFF.md
-    make vex-scan   # same scans with the OpenVEX file in vex/ applied, writes scans/vex-*
-
-| Target | What it does |
+| Command | What it does |
 |---|---|
+| `make all` (= `make image`) | builds the `.deb`s from source (`make deb`), then the image `nginx-rebuild:1.25.5` from `Containerfile` |
 | `make deb` | `build/Dockerfile` + `build/build.sh`: download and verify the sources, apply `build/patches/*.patch`, compile, package; the `.deb`s land in `dist/` |
-| `make image` (= `make all`) | runs `make deb`, then builds `Containerfile` from `dist/` |
-| `make test` | runs `make image`, then `test/compat_test.py` (see `test/README.md`) |
-| `make scan` / `make vex-scan` | runs `make image`, then the scanners as containers (Trivy 0.76.2, Grype 0.121.3, pinned) |
+| `make test` | builds the image, then compares it with `nginx:1.25-bookworm` (`test/compat_test.py`, see `test/README.md`); exits non-zero on mismatch |
+| `make scan` | builds the image, scans it with Trivy and Grype, writes `scans/fixed-*` and `scans/DIFF.md` |
+| `make vex-scan` | the same scans with the OpenVEX file in `vex/` applied, writes `scans/vex-*` |
 | `make clean` | deletes `dist/` |
 
 A first build takes about 3 minutes (measured with `docker build --no-cache` on a
@@ -100,8 +96,7 @@ Full triage: [`TRIAGE.md`](TRIAGE.md). Summary:
   nginx loads, packages the nginx image adds, base OS) and applied one rule per group.
   The CSV records, for every finding, the package, whether Debian 12 has a fix, and
   the method (bump, backport, remove, accept).
-- **Backport, from nginx itself.** No fixed 1.25.x release exists, so any nginx fix
-  has to be a backport. I picked CVE-2026-15176 because it affects 1.25.5, the fix is
+- **Backport, from nginx itself.** I picked CVE-2026-15176 because it affects 1.25.5, the fix is
   one line in the always-compiled core HTTP module, the commit message includes a
   reproducer, a scanner reports it (so the VEX step has something to act on), and
   Debian backported the same change to its own nginx.
@@ -119,8 +114,6 @@ Full triage: [`TRIAGE.md`](TRIAGE.md). Summary:
     would not show up in the rescan;
   - bumping packages nginx does not load (e.g. `curl`) is easy but says nothing
     about nginx.
-- Scanners see only part of the picture for nginx: nginx.org lists 29 advisories
-  covering 1.25.5, Grype reports 5 of them, Trivy none on the upstream image.
 
 ## Drop-in replacement
 
@@ -188,10 +181,11 @@ diff in [`scans/DIFF.md`](scans/DIFF.md) (made by `scans/diff.py`).
 
 How to read these numbers:
 
-- **Most of the drop is not our work.** Our image starts from a current
-  `debian:bookworm-slim` (Debian 12.15; upstream's is 12.5) and apt installs current
-  bookworm packages. Most of the ~370 removed findings come from that, not from the two
-  fixes.
+- **Most of the drop is not our work.** Upstream's image was built in May 2024 on
+  Debian 12.5; ours starts from a current `debian:bookworm-slim` (12.15), whose packages
+  already include Debian's security updates. Most of the ~370 removed findings come
+  from that. Our bump's real contribution is the `Depends: libssl3 (>= 3.0.18-1~deb12u2)`
+  line: it makes the OpenSSL fix a guarantee, not a coincidence of the build date.
 - **The bump:** CVE-2025-15467 is gone from both reports (`libssl3` and `openssl`).
 - **The backport:** CVE-2026-15176 is still listed on our image by both scanners. They
   match on the package name and the version `1.25.5`, and cannot see the patch. That
@@ -265,30 +259,20 @@ needs a new statement.
 
 ## Surprises
 
-- **The scanners barely know this nginx.** It is nginx.org's package, not Debian's,
-  but Grype matches it by name against Debian's nginx data: it shows 5 of the 29
-  nginx.org advisories that cover 1.25.5, plus one false positive (CVE-2026-93479).
-  Trivy shows none on upstream.
-- **Labelling the package honestly made 8 CVEs appear.** Trivy skips packages whose
-  maintainer is nginx.org's packaging address. Ours names its real maintainer, so
-  Trivy started reporting Debian's nginx CVEs for it. Putting the old maintainer back
-  in a throwaway image made them vanish; the rule was then confirmed in Trivy's source.
-  I kept the honest label and used VEX instead.
-- **The reproducer did not crash upstream.** One run dropped the connection with
-  nothing logged; another answered 200. Only the `nginx-debug` log showed the request
-  URI being overwritten with zero bytes. Undefined behaviour does not announce itself.
+- **The scanners barely know this nginx.** Grype matches nginx.org's package by name
+  against Debian's nginx data: 5 of the 29 advisories, plus one false positive. Trivy
+  shows none on upstream.
+- **Labelling the package honestly made 8 CVEs appear** in Trivy (see "Rescan and
+  VEX"). I kept the honest label and used VEX instead of faking the maintainer.
+- **The reproducer did not crash upstream.** Only the `nginx-debug` log showed the
+  request URI being overwritten with zero bytes. Undefined behaviour does not announce
+  itself.
 - **Severity depends on who you ask.** Grype rates CVE-2026-15176 Critical, nginx.org
   "medium". An OpenSSL CVE both scanners rate Critical is rated Low by OpenSSL
   (32-bit only).
 - **The default page's dates matter.** `ETag` and `Last-Modified` are built from file
   time and size. The tarball's html files carry the same date as upstream's image, so
   keeping it (`cp -p`) makes those headers match; the first package lost it.
-- **Most of the CVE drop came from the base image, not from the fixes.** Upstream's
-  image was built in May 2024 on Debian 12.5; ours starts from a current Debian 12.15,
-  whose packages already include Debian's security updates. Rebuilding upstream's own
-  Dockerfile today would remove most of the same findings. Our bump's real
-  contribution is the `Depends: libssl3 (>= 3.0.18-1~deb12u2)` line: it makes the
-  OpenSSL fix a guarantee, not a coincidence of the build date.
 
 ## With more time / differently
 
@@ -306,9 +290,9 @@ The next steps for security are under "Residual risk". Beyond those:
 I used Claude Code (Anthropic) throughout, as a pair: it proposed steps, wrote drafts
 of scripts and text, and ran commands after announcing each one; I approved every
 file, decision and commit message before it landed, and asked "why" until I could
-explain each line myself. Every CVE detail, version, commit hash and checksum in this
-repo comes from a primary source (nginx.org, the nginx GitHub repo, Debian's tracker,
-the scanners' source), not from the model's memory.
+explain it myself. Every CVE detail, version, commit hash and checksum in this repo
+comes from a primary source (nginx.org, the nginx GitHub repo, Debian's tracker, the
+scanners' source), not from the model's memory.
 
 **Where it helped the most**
 
