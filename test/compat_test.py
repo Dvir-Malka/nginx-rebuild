@@ -92,6 +92,47 @@ class DefaultConfig(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn(b"Welcome to nginx!", body)
 
+    def test_head_root(self):
+        status, _, body = self.assertSameResponse("HEAD", "/")
+        self.assertEqual(status, 200)
+        self.assertEqual(body, b"")  # HEAD never has a body
+
+    def test_not_found(self):
+        status, _, body = self.assertSameResponse("GET", "/nope")
+        self.assertEqual(status, 404)
+        # nginx's built-in error page names its version; must match too.
+        self.assertIn(b"nginx/1.25.5", body)
+
+    def test_50x_page(self):
+        status, _, _ = self.assertSameResponse("GET", "/50x.html")
+        self.assertEqual(status, 200)
+
+    def test_post_to_static_file(self):
+        # nginx's static file handler only serves GET and HEAD.
+        status, _, _ = self.assertSameResponse("POST", "/", body=b"x=1")
+        self.assertEqual(status, 405)
+
+    def test_if_none_match(self):
+        # ETag = file mtime + size: matches only if we kept upstream's dates.
+        etag = dict(normalize(self.upstream.request("GET", "/")[1]))["etag"]
+        status, _, body = self.assertSameResponse(
+            "GET", "/", {"If-None-Match": etag})
+        self.assertEqual(status, 304)
+        self.assertEqual(body, b"")
+
+    def test_if_modified_since(self):
+        lm = dict(normalize(self.upstream.request("GET", "/")[1]))["last-modified"]
+        status, _, _ = self.assertSameResponse(
+            "GET", "/", {"If-Modified-Since": lm})
+        self.assertEqual(status, 304)
+
+    def test_range(self):
+        status, headers, body = self.assertSameResponse(
+            "GET", "/", {"Range": "bytes=0-99"})
+        self.assertEqual(status, 206)
+        self.assertEqual(dict(normalize(headers))["content-range"], "bytes 0-99/615")
+        self.assertEqual(len(body), 100)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
