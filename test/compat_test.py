@@ -4,6 +4,7 @@ Each test sends the same request to both containers and asserts that the
 status, headers and body are equal. Run: python3 test/compat_test.py
 """
 import http.client
+import json
 import os
 import re
 import shutil
@@ -283,6 +284,55 @@ class MalformedRequests(CompareBase):
         resp = self.assertSameRaw(req)
         self.assertTrue(resp.startswith(b"HTTP/1.1 400 "))
         self.assertIn(b"Request Header Or Cookie Too Large", resp)
+
+
+def inspect_config(image):
+    """The image's run settings (docker image inspect .Config) as a dict."""
+    return json.loads(docker("image", "inspect", "--format", "{{json .Config}}", image))
+
+
+def configure_arguments(image):
+    """The 'configure arguments:' line of nginx -V (printed on stderr)."""
+    out = subprocess.run(["docker", "run", "--rm", "--entrypoint", "nginx", image, "-V"],
+                         check=True, capture_output=True, text=True).stderr
+    line = next(l for l in out.splitlines() if l.startswith("configure arguments:"))
+    # The build directory differs (upstream's builder vs our /build); it only
+    # changes file names inside debug info, not how nginx behaves.
+    return re.sub(r"-ffile-prefix-map=[^ ']*", "-ffile-prefix-map=<builddir>", line)
+
+
+class ImageMetadata(unittest.TestCase):
+    """The drop-in contract that docker run takes from the image itself."""
+
+    def test_config_equal(self):
+        a, b = inspect_config(UPSTREAM), inspect_config(OURS)
+        # Labels are informational. Our maintainer label names us, not
+        # upstream, on purpose: a label should be truthful.
+        a.pop("Labels", None)
+        b.pop("Labels", None)
+        self.assertEqual(a, b)
+        # Sanity: the fields the brief names are really there.
+        self.assertEqual(a["Entrypoint"], ["/docker-entrypoint.sh"])
+        self.assertIn("80/tcp", a["ExposedPorts"])
+
+    def test_configure_arguments_equal(self):
+        self.assertEqual(configure_arguments(UPSTREAM), configure_arguments(OURS))
+
+    def test_graceful_stop(self):
+        # docker stop sends the image's StopSignal (SIGQUIT = finish open
+        # requests, then exit) and kills the container after 10 s.
+        for image in (UPSTREAM, OURS):
+            with self.subTest(image=image):
+                c = Container(image)
+                try:
+                    start = time.time()
+                    docker("stop", c.id)
+                    took = time.time() - start
+                    code = docker("inspect", "--format", "{{.State.ExitCode}}", c.id)
+                finally:
+                    c.remove()
+                self.assertEqual(code, "0")
+                self.assertLess(took, 5)
 
 
 if __name__ == "__main__":
