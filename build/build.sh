@@ -146,6 +146,19 @@ Description: nginx ${NGINX_VERSION} rebuilt from upstream source
  Rebuild of the nginx package found in the nginx:1.25-bookworm image,
  compiled from the nginx.org source tarball.
 EOF
+# Config files dpkg must not overwrite on upgrade. dpkg also records their
+# MD5 when installing, and upstream's entrypoint script
+# 10-listen-on-ipv6-by-default.sh compares default.conf with that MD5
+# before it enables IPv6. Same list as upstream's package, minus the
+# init, default and logrotate files we do not ship.
+cat > /pkgroot/DEBIAN/conffiles <<EOF
+/etc/nginx/conf.d/default.conf
+/etc/nginx/fastcgi_params
+/etc/nginx/mime.types
+/etc/nginx/nginx.conf
+/etc/nginx/scgi_params
+/etc/nginx/uwsgi_params
+EOF
 mkdir /out
 # --root-owner-group records every file as owned by root, as upstream's are.
 dpkg-deb --build --root-owner-group /pkgroot "/out/nginx_${PKG_VERSION}_${ARCH}.deb"
