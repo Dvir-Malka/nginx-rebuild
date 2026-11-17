@@ -21,6 +21,7 @@ Tested on Linux x86_64 (Ubuntu 24.04 under WSL2, Docker 29.9.3).
 | `make all` (= `make image`) | builds the `.deb`s from source (`make deb`), then the image `nginx-rebuild:1.25.5` from `Containerfile` |
 | `make deb` | `build/Dockerfile` + `build/build.sh`: download and verify the sources, apply `build/patches/*.patch`, compile, package; the `.deb`s land in `dist/` |
 | `make test` | builds the image, then compares it with `nginx:1.25-bookworm` (`test/compat_test.py`, see `test/README.md`); exits non-zero on mismatch |
+| `make cve-test` | builds the image, then runs `test/cve-2026-15176.sh`: passes if our image rejects the CVE's reproducer and upstream does not |
 | `make scan` | builds the image, scans it with Trivy and Grype, writes `scans/fixed-*` and `scans/DIFF.md` |
 | `make vex-scan` | the same scans with the OpenVEX file in `vex/` applied, writes `scans/vex-*` |
 | `make clean` | deletes `dist/` |
@@ -163,7 +164,7 @@ log output.
 
 **The test can fail:** pointed at `nginx:1.27-bookworm` it reports 28 failures and
 exits 1. The fixed CVE is the one case where the images must differ; it is tested
-separately by [`test/cve-2026-15176.sh`](test/cve-2026-15176.sh).
+separately by `make cve-test` ([`test/cve-2026-15176.sh`](test/cve-2026-15176.sh)).
 
 Full definition, coverage table and exclusions: [`test/README.md`](test/README.md).
 

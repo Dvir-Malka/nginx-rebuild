@@ -5,13 +5,14 @@
 #   make scan   scan the image with Trivy and Grype, write scans/fixed-* and scans/DIFF.md
 #   make vex-scan  same scans with vex/ applied, write scans/vex-*
 #   make test   compare the image with upstream nginx:1.25-bookworm (test/compat_test.py)
+#   make cve-test  show CVE-2026-15176 on upstream and the fix in our image
 #   make clean  delete dist/
 
 # Name of the final image; override with: make image IMAGE=name:tag
 IMAGE ?= nginx-rebuild:1.25.5
 
 # These targets are command names, not files make should look for.
-.PHONY: all deb image scan vex-scan test clean
+.PHONY: all deb image scan vex-scan test cve-test clean
 
 all: image
 
@@ -65,6 +66,11 @@ vex-scan: image
 # image. Needs only python3 (standard library) besides Docker.
 test: image
 	IMAGE=$(IMAGE) python3 test/compat_test.py
+
+# Shows the backported CVE: the reproducer from upstream's fix commit makes our
+# image log nginx's alert, upstream's does not. Exits non-zero otherwise.
+cve-test: image
+	sh test/cve-2026-15176.sh nginx:1.25-bookworm $(IMAGE)
 
 clean:
 	rm -rf dist
