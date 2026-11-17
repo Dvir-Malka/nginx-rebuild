@@ -122,6 +122,27 @@ Full triage: [`TRIAGE.md`](TRIAGE.md). Summary:
 - Scanners see only part of the picture for nginx: nginx.org lists 29 advisories
   covering 1.25.5, Grype reports 5 of them, Trivy none on the upstream image.
 
+## Drop-in replacement
+
+The image was compared with `nginx:1.25-bookworm`, not built from memory:
+
+- **Config:** `docker image inspect` `.Config` is identical (entrypoint
+  `/docker-entrypoint.sh`, `CMD ["nginx", "-g", "daemon off;"]`, port 80/tcp,
+  `STOPSIGNAL SIGQUIT`, no `User`/`WorkingDir`, same `ENV`) except the `maintainer`
+  label, which names who built this image. `ENV` keeps upstream's values
+  (`PKG_RELEASE=1~bookworm`, not our `+echo2`), because scripts may read them.
+  `make test` checks this.
+- **User:** `nginx`, uid/gid 101, created before the package is installed, as upstream does.
+- **Filesystem:** paths, owners, permissions, symlinks (logs to `/dev/stdout` and
+  `/dev/stderr`) and file sizes were compared by hand with `find` in both images:
+  identical, except the dynamic module `.so` files, 16–24 bytes smaller (we compile
+  them ourselves, so the bytes are not identical).
+- **Copied from upstream, not compiled:** `docker/docker-entrypoint.sh`,
+  `docker/docker-entrypoint.d/*`, `build/debian/nginx.conf` and
+  `build/debian/default.conf` are byte-identical copies from the upstream image. They
+  are scripts and config, not binaries; the entrypoint's behaviour (including its
+  config templates) is part of what users rely on.
+
 ## Compatibility
 
 `make test` runs [`test/compat_test.py`](test/compat_test.py) (Python 3 standard
