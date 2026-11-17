@@ -139,7 +139,32 @@ make -j"$(nproc)"
 install -m 755 objs/nginx /pkgroot/usr/sbin/nginx-debug
 /pkgroot/usr/sbin/nginx-debug -V
 
-echo "== 9. Package"
+echo "== 9. Compile the dynamic modules"
+# Upstream builds the modules in separate configure runs: neither nginx -V
+# nor nginx-debug -V lists them. --with-compat (in CONFIGURE_FLAGS) is what
+# lets a module built this way load into the main binary.
+MODULE_FLAGS=(
+  --with-http_xslt_module=dynamic
+  --with-http_image_filter_module=dynamic
+  --with-http_geoip_module=dynamic
+  --with-stream_geoip_module=dynamic
+)
+mkdir /mods
+# For nginx-debug: same flags plus --with-debug, saved as name-debug.so.
+make clean
+./configure "${CONFIGURE_FLAGS[@]}" --with-debug "${MODULE_FLAGS[@]}"
+make -j"$(nproc)" modules
+for so in objs/*.so; do
+  install -m 644 "${so}" "/mods/$(basename "${so}" .so)-debug.so"
+done
+# For nginx: the normal flags.
+make clean
+./configure "${CONFIGURE_FLAGS[@]}" "${MODULE_FLAGS[@]}"
+make -j"$(nproc)" modules
+install -m 644 objs/*.so /mods/
+ls -l /mods
+
+echo "== 10. Package"
 ARCH="$(dpkg --print-architecture)"
 mkdir /pkgroot/DEBIAN
 # Depends, Provides, Conflicts and Replaces follow `dpkg -s nginx` in
