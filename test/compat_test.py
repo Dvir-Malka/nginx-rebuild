@@ -5,7 +5,9 @@ status, headers and body are equal. Run: python3 test/compat_test.py
 """
 import http.client
 import os
+import re
 import shutil
+import socket
 import subprocess
 import tempfile
 import time
@@ -72,6 +74,17 @@ class Container:
         finally:
             conn.close()
 
+    def raw(self, data):
+        """Send bytes exactly as given and return all bytes nginx sends back
+        until it closes the connection. Needed for requests that http.client
+        would refuse to send or would quietly fix."""
+        with socket.create_connection(("127.0.0.1", self.port), timeout=5) as s:
+            s.sendall(data)
+            chunks = []
+            while chunk := s.recv(65536):
+                chunks.append(chunk)
+        return b"".join(chunks)
+
     def remove(self):
         docker("rm", "-f", self.id)
 
@@ -81,6 +94,11 @@ def normalize(headers):
     nginx writes headers in a fixed order, so a new order is a difference."""
     return [(k.lower(), v) for k, v in headers
             if k.lower() not in IGNORED_HEADERS]
+
+
+def strip_date(raw):
+    """Remove the Date header line from a raw response (clock, see above)."""
+    return re.sub(rb"\r\nDate: [^\r]*", b"", raw)
 
 
 class CompareBase(unittest.TestCase):
@@ -224,6 +242,47 @@ class CustomConfig(CompareBase):
         # Default large_client_header_buffers is 8k, so 10k of URI is too long.
         status, _, _ = self.assertSameResponse("GET", "/" + "a" * 10000)
         self.assertEqual(status, 414)
+
+
+class MalformedRequests(CompareBase):
+    """Broken requests over a raw socket; the full response bytes must match."""
+
+    def assertSameRaw(self, data):
+        a = strip_date(self.upstream.raw(data))
+        b = strip_date(self.ours.raw(data))
+        self.assertEqual(a, b, "raw response differs")
+        return a
+
+    def test_http10_without_host(self):
+        # Valid: HTTP/1.0 does not require Host. Proves the raw path works.
+        resp = self.assertSameRaw(b"GET / HTTP/1.0\r\n\r\n")
+        self.assertTrue(resp.startswith(b"HTTP/1.1 200 OK\r\n"))
+
+    def test_unknown_http_version(self):
+        resp = self.assertSameRaw(b"GET / HTTP/9.9\r\nHost: localhost\r\n\r\n")
+        self.assertTrue(resp.startswith(b"HTTP/1.1 505 "))
+
+    def test_http11_without_host(self):
+        # HTTP/1.1 makes Host mandatory.
+        resp = self.assertSameRaw(b"GET / HTTP/1.1\r\n\r\n")
+        self.assertTrue(resp.startswith(b"HTTP/1.1 400 "))
+
+    def test_garbage_bytes(self):
+        resp = self.assertSameRaw(b"\x00\x01\x02 not http at all\r\n\r\n")
+        self.assertTrue(resp.startswith(b"HTTP/1.1 400 "))
+
+    def test_lowercase_method(self):
+        # nginx accepts only upper-case methods.
+        resp = self.assertSameRaw(b"get / HTTP/1.1\r\nHost: localhost\r\n\r\n")
+        self.assertTrue(resp.startswith(b"HTTP/1.1 400 "))
+
+    def test_oversized_header(self):
+        # One 10 KB header line is larger than the 8k header buffer.
+        req = (b"GET / HTTP/1.1\r\nHost: localhost\r\nX-Big: "
+               + b"a" * 10000 + b"\r\n\r\n")
+        resp = self.assertSameRaw(req)
+        self.assertTrue(resp.startswith(b"HTTP/1.1 400 "))
+        self.assertIn(b"Request Header Or Cookie Too Large", resp)
 
 
 if __name__ == "__main__":
