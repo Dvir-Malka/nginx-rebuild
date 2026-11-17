@@ -136,7 +136,7 @@ Tracker: <https://security-tracker.debian.org/tracker/CVE-2025-15467>
 
 | Candidate | Why not |
 |---|---|
-| CVE-2026-97205, -97629, -95101 (nginx) | Each needs a feature my compatibility test does not exercise (AIO + SSI, TLS, HTTP/3), so I could not show the fix did not break anything. I did not read their fixes. |
+| CVE-2026-97205, -97629, -95101 (nginx) | Each would need more setup to prove the fix: an async file I/O + SSI setup, TLS certificates and session resumption, or an HTTP/3 client (Python's standard library has none). CVE-2026-15176 needed only plain HTTP and comes with a reproducer. I did not read their fixes. |
 | CVE-2026-42945 and 23 other nginx.org advisories | They affect 1.25.5 but no scanner reports them. Left as residual risk. I did not read their fixes. |
 | CVE-2024-7347 (nginx mp4 module) | Fallback backport: nginx.org publishes an official patch file. No scanner reports it. |
 | `zlib1g` | 4 findings, none with a fix in Debian 12. Nothing to bump to. |
