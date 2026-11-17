@@ -165,6 +165,11 @@ install -m 644 objs/*.so /mods/
 ls -l /mods
 
 echo "== 10. Package"
+# Remove debug information before packaging, as Debian packaging does.
+# Upstream's nginx package is 3.4 MB installed; unstripped, ours would be
+# about 17 MB. The code that runs does not change.
+strip /pkgroot/usr/sbin/nginx /pkgroot/usr/sbin/nginx-debug
+strip --strip-unneeded /mods/*.so
 ARCH="$(dpkg --print-architecture)"
 mkdir /pkgroot/DEBIAN
 # Depends, Provides, Conflicts and Replaces follow `dpkg -s nginx` in
