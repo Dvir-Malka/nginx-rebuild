@@ -212,6 +212,10 @@ mkdir /pkgroot/DEBIAN
 # Depends, Provides, Conflicts and Replaces follow `dpkg -s nginx` in
 # nginx:1.25-bookworm. lsb-base is left out: it is only needed by the
 # init script, which this package does not ship.
+# One deliberate change, also in the njs package below:
+# libssl3 >= 3.0.18-1~deb12u2: Debian's first bookworm build fixing
+# CVE-2025-15467 (https://security-tracker.debian.org/tracker/CVE-2025-15467).
+# Upstream's image has 3.0.11-1~deb12u2; this makes apt install a fixed one.
 cat > /pkgroot/DEBIAN/control <<EOF
 Package: nginx
 Version: ${PKG_VERSION}
@@ -219,7 +223,7 @@ Architecture: ${ARCH}
 Maintainer: Dvir Malka <357322546+Dvir-Malka@users.noreply.github.com>
 Section: httpd
 Priority: optional
-Depends: libc6 (>= 2.34), libcrypt1 (>= 1:4.1.0), libpcre2-8-0 (>= 10.22), libssl3 (>= 3.0.0), zlib1g (>= 1:1.1.4)
+Depends: libc6 (>= 2.34), libcrypt1 (>= 1:4.1.0), libpcre2-8-0 (>= 10.22), libssl3 (>= 3.0.18-1~deb12u2), zlib1g (>= 1:1.1.4)
 Provides: httpd, nginx-r${NGINX_VERSION}
 Conflicts: nginx-common, nginx-core
 Replaces: nginx-common, nginx-core
@@ -295,7 +299,7 @@ mkdir -p /pkg-njs/usr/lib/nginx/modules /pkg-njs/usr/bin
 cp -p /mods/ngx_http_js_module*.so /mods/ngx_stream_js_module*.so /pkg-njs/usr/lib/nginx/modules/
 install -m 755 /build/njs/build/njs /pkg-njs/usr/bin/njs
 build_module_deb /pkg-njs nginx-module-njs "${NGINX_VERSION}+${NJS_VERSION}-3~bookworm+echo2" \
-  "libc6 (>= 2.35), libedit2 (>= 3.1-20130611-0), libpcre2-8-0 (>= 10.32), libssl3 (>= 3.0.0), libxml2 (>= 2.7.4), zlib1g (>= 1:1.1.4), nginx-r${NGINX_VERSION}" \
+  "libc6 (>= 2.35), libedit2 (>= 3.1-20130611-0), libpcre2-8-0 (>= 10.32), libssl3 (>= 3.0.18-1~deb12u2), libxml2 (>= 2.7.4), zlib1g (>= 1:1.1.4), nginx-r${NGINX_VERSION}" \
   "nginx ${NGINX_VERSION} njs dynamic modules, rebuilt from upstream source"
 
 # Show the metadata and the file list of every package we built.
